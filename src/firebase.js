@@ -1,7 +1,6 @@
-// firebase.js
 import { initializeApp } from 'firebase/app';
 import { getAnalytics } from 'firebase/analytics';
-import { getAuth } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
@@ -25,4 +24,19 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const storage = getStorage(app);
 
-export { auth, db, analytics, storage }; // Export analytics if you plan to use it later
+// Function to register a user and send a verification email
+const registerUser = async (email, password) => {
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // Send email verification
+    await sendEmailVerification(user);
+    
+    return { success: true, message: "Verification email sent. Please check your inbox." };
+  } catch (error) {
+    return { success: false, message: error.message };
+  }
+};
+
+export { auth, db, analytics, storage, registerUser };

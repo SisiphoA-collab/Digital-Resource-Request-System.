@@ -1,3 +1,4 @@
+import { sendEmailVerification } from "firebase/auth";
 import React, { useState, useEffect } from 'react';
 import './AuthForm.css';
 import logo from '../assets/logo.png';
@@ -110,6 +111,7 @@ const AuthForm = () => {
     e.preventDefault();
     try {
       if (isSignUp) {
+        // Validate password and admin code (if applicable)
         if (!validatePassword(password)) {
           alert('Password must be 8 characters with 5 letters (1 capital), 2 digits, and 1 special character');
           return;
@@ -122,11 +124,13 @@ const AuthForm = () => {
         // Step 1: Create user in Firebase Authentication
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        const role = isAdmin && adminCode === adminCodeHardcoded ? 'admin' : 'user';
-        console.log('AuthForm.js - Signup - Assigned role:', role);
-        console.log('AuthForm.js - Signup - Step 1: User created in Firebase Auth with UID:', user.uid);
 
-        // Step 2: Initialize user data in Realtime Database
+        // Step 2: Send email verification
+        await sendEmailVerification(user);
+        alert('Verification email sent. Please check your inbox and verify your email before logging in.');
+
+        // Continue with user data setup
+        const role = isAdmin && adminCode === adminCodeHardcoded ? 'admin' : 'user';
         const userData = {
           name: username,
           role,
@@ -134,29 +138,24 @@ const AuthForm = () => {
           createdAt: new Date().toISOString(),
         };
         await set(dbRef(db, `users/${user.uid}`), userData);
-        console.log('AuthForm.js - Signup - Step 2: User data initialized in users/', user.uid, ':', userData);
-
+        
         // Step 3: Initialize userDownloads for the user (empty)
         await set(dbRef(db, `userDownloads/${user.uid}`), {});
-        console.log('AuthForm.js - Signup - Step 3: userDownloads/', user.uid, ' initialized as empty');
-
-        // Verify data was saved
-        const userSnapshot = await get(dbRef(db, `users/${user.uid}`));
-        const savedData = userSnapshot.val();
-        console.log('AuthForm.js - Signup - Verified saved data:', savedData);
-
-        const downloadsSnapshot = await get(dbRef(db, `userDownloads/${user.uid}`));
-        const savedDownloads = downloadsSnapshot.val();
-        console.log('AuthForm.js - Signup - Verified userDownloads:', savedDownloads);
-
+        console.log('User data initialized and userDownloads created.');
+        
         navigate(role === 'admin' ? '/admin-dashboard' : '/dashboard');
       } else {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
+        // Check if email is verified before proceeding
+        if (!user.emailVerified) {
+          alert('Please verify your email before logging in. Check your inbox for the verification email.');
+          return;
+        }
+
         const userSnapshot = await get(dbRef(db, `users/${user.uid}`));
         const userData = userSnapshot.val();
-        console.log('AuthForm.js - Login - Fetched user data:', userData);
 
         if (!userData) {
           const role = 'user';
@@ -167,19 +166,17 @@ const AuthForm = () => {
             createdAt: new Date().toISOString(),
           });
           await set(dbRef(db, `userDownloads/${user.uid}`), {});
-          console.log('AuthForm.js - Login - No data found, set default user role and downloads for UID:', user.uid);
+          console.log('No user data found, default user role set.');
           navigate('/dashboard');
           resetForm();
         } else {
           const role = userData.role || 'user';
-          console.log('AuthForm.js - Login - Role from DB:', role);
           navigate(role === 'admin' ? '/admin-dashboard' : '/dashboard');
           resetForm();
         }
       }
-      //resetForm();
     } catch (error) {
-      console.error('AuthForm.js - Authentication error:', error.code, error.message);
+      console.error('Authentication error:', error.code, error.message);
       if (error.code === 'auth/email-already-in-use') {
         alert('Email already in use. Please use a different email.');
       } else if (error.code === 'auth/invalid-email') {
@@ -190,7 +187,8 @@ const AuthForm = () => {
         alert(`Authentication failed: ${error.message}`);
       }
     }
-  };
+};
+
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
@@ -211,6 +209,7 @@ const AuthForm = () => {
         alert('This email is not registered. Please sign up first.');
       } else {
         alert(`Password reset failed: ${error.message}`);
+
       }
     }
   };
